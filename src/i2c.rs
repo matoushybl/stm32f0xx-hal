@@ -1,4 +1,5 @@
 use core::ops::Deref;
+use core::marker::PhantomData;
 
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
@@ -247,6 +248,8 @@ where
                 .bits(scll)
         });
 
+//        hprintln!("prescaler {} scldel {} sdadel {} scll {} sclh {}", presc, scldel, sdadel, scll, sclh).unwrap();
+
         // Enable the I2C processing
         self.i2c.cr1.modify(|_, w| w.pe().set_bit());
 
@@ -295,6 +298,90 @@ where
         Ok(value)
     }
 }
+
+#[derive(Debug)]
+pub enum SlaveError {
+    OVERRUN,
+    NACK,
+}
+
+pub trait SlaveInterface {
+    type Error;
+
+    fn set_own_slave_addr(&self, addr: u8);
+    fn should_read(&self) -> bool;
+    fn slave_wait_for_addressation(&self) -> Result<(), Error>;
+    fn slave_recv_byte(&self) -> Result<u8, Error>;
+    fn slave_send_byte(&self, byte: u8) -> Result<(), Error>;
+}
+
+impl<I2C, SCLPIN, SDAPIN> SlaveInterface for I2c<I2C, SCLPIN, SDAPIN>
+    where
+        I2C: Deref<Target = I2cRegisterBlock>,
+{
+    type Error = Error;
+
+    fn set_own_slave_addr(&self, addr: u8) {
+//        self.i2c.cr1.write(|w| {
+//            w.addrie().set_bit();
+//        });
+        self.i2c.oar1.write(|w| {
+            w.oa1en().clear_bit()
+        });
+        self.i2c.oar2.write(|w| {
+            w.oa2en().clear_bit()
+        });
+        self.i2c.oar1.modify(|r, w| {
+            w.oa1().bits(u16::from(addr) << 1);
+            w.oa1en().set_bit();
+            w.oa1mode().clear_bit()
+        });
+    }
+
+    fn should_read(&self) -> bool {
+        self.i2c.isr.read().dir().bit_is_clear()
+    }
+
+    fn slave_wait_for_addressation(&self) -> Result<(), Error> {
+        while {
+            let isr = self.i2c.isr.read();
+            self.check_and_clear_error_flags(&isr)?;
+            isr.addr().bit_is_clear()
+        } { }
+
+        self.i2c.icr.write(|w| { w.addrcf().set_bit() });
+
+        Ok(())
+    }
+
+    fn slave_recv_byte(&self) -> Result<u8, Error> {
+        return self.recv_byte();
+    }
+
+    fn slave_send_byte(&self, byte: u8) -> Result<(), Error> {
+        return self.send_byte(byte);
+    }
+}
+
+//
+//pub trait SlaveFactory<I2C, SCLPIN, SDAPIN>  {
+//    fn slave(&self, addr: u8) -> I2c<I2C, SCLPIN, SDAPIN, Slave>;
+//}
+//
+//impl<I2C, SCLPIN, SDAPIN> SlaveFactory<I2C, SCLPIN, SDAPIN> for I2c<I2C, SCLPIN, SDAPIN, Master>
+//    where
+//        I2C: Deref<Target = I2cRegisterBlock>,
+//{
+//    fn slave(&self, addr: u8) -> I2c<I2C, SCLPIN, SDAPIN, Slave> {
+//        self.i2c.oar1.modify(|r, w| {
+//            w.oa1().bits(u16::from(addr) << 1);
+//            w.oa1en().set_bit();
+//            w
+//        });
+//
+//        return I2c {i2c: self.i2c, pins: self.pins, _mode: PhantomData }
+//    }
+//}
 
 impl<I2C, SCLPIN, SDAPIN> WriteRead for I2c<I2C, SCLPIN, SDAPIN>
 where

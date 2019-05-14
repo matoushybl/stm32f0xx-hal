@@ -22,7 +22,7 @@ impl RccExt for RCC {
 /// Constrained RCC peripheral
 pub struct Rcc {
     pub clocks: Clocks,
-    pub(crate) regs: RCC,
+    pub regs: RCC,
 }
 
 #[cfg(any(feature = "stm32f030",
