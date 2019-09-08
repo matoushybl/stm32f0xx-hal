@@ -192,6 +192,7 @@ macro_rules! timers {
 
                     let arr = cast::u16(ticks / cast::u32(psc + 1)).unwrap();
                     self.tim.arr.write(|w| unsafe { w.bits(cast::u32(arr)) });
+                    self.tim.dier.write(|w| w.uie().set_bit());
 
                     // start counter
                     self.tim.cr1.modify(|_, w| w.cen().set_bit());
@@ -220,51 +221,7 @@ timers! {
     TIM14: (tim14, tim14en, tim14rst, apb1enr, apb1rstr),
     TIM16: (tim16, tim16en, tim16rst, apb2enr, apb2rstr),
     TIM17: (tim17, tim17en, tim17rst, apb2enr, apb2rstr),
-}
-
-#[cfg(any(
-    feature = "stm32f031",
-    feature = "stm32f038",
-    feature = "stm32f042",
-    feature = "stm32f048",
-    feature = "stm32f051",
-    feature = "stm32f058",
-    feature = "stm32f071",
-    feature = "stm32f072",
-    feature = "stm32f078",
-    feature = "stm32f091",
-    feature = "stm32f098",
-))]
-timers! {
     TIM2: (tim2, tim2en, tim2rst, apb1enr, apb1rstr),
 }
 
-#[cfg(any(
-    feature = "stm32f030x8",
-    feature = "stm32f030xc",
-    feature = "stm32f051",
-    feature = "stm32f058",
-    feature = "stm32f070xb",
-    feature = "stm32f071",
-    feature = "stm32f072",
-    feature = "stm32f078",
-    feature = "stm32f091",
-    feature = "stm32f098",
-))]
-timers! {
-    TIM6: (tim6, tim6en, tim6rst, apb1enr, apb1rstr),
-    TIM15: (tim15, tim15en, tim15rst, apb2enr, apb2rstr),
-}
 
-#[cfg(any(
-    feature = "stm32f030xc",
-    feature = "stm32f070xb",
-    feature = "stm32f071",
-    feature = "stm32f072",
-    feature = "stm32f078",
-    feature = "stm32f091",
-    feature = "stm32f098",
-))]
-timers! {
-    TIM7: (tim7, tim7en, tim7rst, apb1enr, apb1rstr),
-}

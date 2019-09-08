@@ -22,7 +22,7 @@ impl RccExt for RCC {
 /// Constrained RCC peripheral
 pub struct Rcc {
     pub clocks: Clocks,
-    pub(crate) regs: RCC,
+    pub regs: RCC,
 }
 
 #[cfg(any(feature = "stm32f030",
@@ -92,8 +92,72 @@ mod inner {
     }
 }
 
-#[cfg(any(feature = "stm32f031", // TODO: May be an SVD bug
-          feature = "stm32f038",
+#[cfg(any(feature = "stm32f031"))]
+mod inner {
+    use crate::stm32::{
+        RCC,
+        rcc::{
+            cfgr::SWW
+        }
+    };
+
+    pub(super) const HSI: u32 = 8_000_000; // Hz
+
+    pub(super) enum SysClkSource {
+        HSI,
+        HSE(u32),
+    }
+
+    pub(super) fn get_freq(c_src: &SysClkSource) -> u32 {
+        // Select clock source based on user input and capability
+        // Highest selected frequency source available takes precedent.
+        match c_src {
+            SysClkSource::HSE(freq) => *freq,
+            _ => HSI,
+        }
+    }
+
+    pub(super) fn enable_clock(rcc: &mut RCC, c_src: &SysClkSource) {
+        // Enable the requested clock
+        match c_src {
+            SysClkSource::HSE(_) => {
+                rcc.cr.modify(|_, w| w.csson().on().hseon().on().hsebyp().not_bypassed());
+
+                while !rcc.cr.read().hserdy().bit_is_set() {}
+            }
+            SysClkSource::HSI => {
+                rcc.cr.write(|w| w.hsion().set_bit());
+                while rcc.cr.read().hsirdy().bit_is_clear() {}
+            }
+        }
+    }
+
+    pub(super) fn enable_pll(rcc: &mut RCC, c_src: &SysClkSource, pllmul_bits: u8, ppre_bits: u8, hpre_bits: u8) {
+        let pllsrc_bit: u8 = match c_src {
+            SysClkSource::HSI => 0b00,
+            SysClkSource::HSE(_) => 0b10,
+        };
+
+        // Set PLL source and multiplier
+        rcc.cfgr.modify(|_, w| unsafe { w.pllsrc().bits(pllsrc_bit).pllmul().bits(pllmul_bits) });
+
+        rcc.cr.write(|w| w.pllon().set_bit());
+        while rcc.cr.read().pllrdy().bit_is_clear() {}
+
+        rcc.cfgr.modify(|_, w| unsafe {
+            w.ppre().bits(ppre_bits).hpre().bits(hpre_bits).sw().pll()
+        });
+    }
+
+    pub(super) fn get_sww(c_src: &SysClkSource) -> SWW {
+        match c_src {
+            SysClkSource::HSI => SWW::HSI,
+            SysClkSource::HSE(_) => SWW::HSE,
+        }
+    }
+}
+
+#[cfg(any(feature = "stm32f038",
           feature = "stm32f042",
           feature = "stm32f048",
           feature = "stm32f051",
@@ -196,8 +260,7 @@ impl CFGR {
         self
     }
 
-    #[cfg(any(feature = "stm32f031", // TODO: May be an SVD bug
-              feature = "stm32f038",
+    #[cfg(any(feature = "stm32f038",
               feature = "stm32f042",
               feature = "stm32f048",
               feature = "stm32f051",
